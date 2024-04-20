@@ -1,0 +1,121 @@
+---
+title: "PEC 1 Aspectos básicos del análisis multivariante"
+author: "Marc Menéndez Simó"
+date: "17-10-2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 1.
+### a)
+
+#### 1. 
+
+Que el experimento sea controlado y exista una asociación signifivativa entre el tratamiento y el efecto no puede confirmar definitivamente que el tratamiento es la causa del efecto observado, ya que, aunque sea controlado, pueden existir variables extrañas que no se hayan contemplado que puedan influir en el experimento.
+
+
+
+#### 2.
+
+Relación causal. Sin embargo, debemos tener en cuenta que no tiene porqué ser la única causa del insomnio. Pueden existir otros factores que influyan en el insomnio.
+
+
+
+#### 3.
+
+Existen dos grandes tipos de estrategias para la elección de los participantes de una investigación:
+
+* la selección aleatoria, cuando la muestra escogida es aleatoria, es decir, todos los participantes tienen la misma probabilidad de ser seleccionados.
+* la selección no aleatoria, cuando la muestra no es aleatoria.
+
+Por otro lado, el fenónemo de la confusión se centra en aquellas variables que pueden influir en el resultado de una investigación.
+
+#### 4.
+
+Esta asignatura se centra particularmente en la elección de la técnica analítica, estimación del modelo y la interpretación de los resultados. Se hace hincapié en las técnicas que deben usarse dependiendo de la investigación y en comprender los resultados obtenidos y como se relacionan con las variables.
+
+
+# 2.
+### a)
+
+Parece que los más indicando sería realizar un análisis de componentes o factorial. Nos encontramos ante una técnica de interdepenendecia cuyas variables puden ser cuantitativas o cualitativas. Con este análisis se podría obtener una descripción de la estructura subyacente de los datos que sea capaz de explicar la variancia del *engagement* de los usuarios.
+
+
+### b)
+
+En un contexto en el que se quiere descubrir cuales son los factores que influyen en la satisfacción de los clientes en base a diferentes variables, lo más indicado parece realizar un análisi de regresión múltiple ya que consta principalmente de una variable dependiente cuantitativa que sería la satisfacción del cliente y diversas variables independientes (como el precio, duración de la batería, etc.). De este modo, se podría identificar qué variable independiente es la que tiene un mayor impacto en la satisfacción del cliente.
+
+# 3.
+
+```{r}
+data <- read.table("Fatalities.csv", header=TRUE, sep=",", dec=".", skip=0,
+fileEncoding = "UTF-8")
+attach(data)
+head(data, n=3)
+```
+
+### a)
+
+Para describir la relación entre estas dos variables podemos mirar su correlación.
+
+```{r}
+
+cor(spirits, fatal, method="pearson")
+
+```
+Obervamos que el cociente de correlación es prácticamente 0. Por lo tanto, no existe una relación lineal entre las varibles, pero debemos tener en cuenta que esto no implica que no exista alguna relación entre las variables.
+
+
+Podemos mirar también un diagrama de dispersión para visualizar este resultado.
+
+```{r}
+
+plot(spirits, fatal,xlab="consumo alcohol",ylab="nº accidentes",pch=1)
+title("Consumo alcohol vs nº accidentes mortales")
+
+```
+
+### b)
+
+Análisis de componentes o un análisis factorial ya que todas las variables son cuantitativas.
+
+
+
+
+### c)
+
+Si utilizamos un análisis de componentes para el modelo anterior no tiene sentido buscar relaciones de dependencia ya que se trata de una relación de interdependencia.
+
+
+
+# 4.
+
+```{r}
+data2 <- read.table("NMES1988.csv", header=TRUE, sep=",", dec=".", skip=0,
+fileEncoding = "UTF-8")
+attach(data2)
+head(data2, n=3)
+```
+
+
+### a)
+
+Con una tabla de contingencias podríamos mostrar la distribución conjunta de la salud y los ingresos.
+
+Si nos hubieran pedido determinar la relación con un objetivo inferencial podríamos realizar una regresión logística a partir de una variable dependiente cualitativa (*health*) y una variable independiente cuantitativa (*income*).
+
+
+### b)
+
+Buscamos una técnica que a partir de tres variables independientes nos identifique la pertenencia de los individuos a dos grupos de individuos similiares (*normal* y *limited*). Al tratrse de un caso donde encontramos una variable dependiente cualitativa (*adl*) podríamos usar una regresión logística para predecir la pertenencia de los individuos a cada uno de los grupos.
+
+
+### c)
+
+La variable dependiente sería *adl*, mientras que las independientes son *income*, *school* y *employed*.
+
+
