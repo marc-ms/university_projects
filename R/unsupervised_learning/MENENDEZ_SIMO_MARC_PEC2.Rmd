@@ -1,0 +1,351 @@
+---
+title: "Minería de datos: PEC2 - Métodos no supervisados"
+author: "Marc Menéndez Simó"
+date: "14-04-2024"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+# paquete con el conjunto de datos
+if (!require('Stat2Data')) install.packages('Stat2Data')
+library('Stat2Data')
+
+# paquete con las funciones para el kmeans
+if (!require('cluster')) install.packages('cluster')
+library('cluster')
+
+# paquete que permite usar la función kmeansruns
+if (!require('fpc')) install.packages('fpc')
+library('fpc')
+
+if (!require('factoextra')) install.packages('factoextra')
+library('factoextra')
+
+if (!require('dbscan')) install.packages('dbscan')
+library('dbscan')
+```
+
+
+Cargamos el conjunto de datos a analizar:
+
+```{r}
+data("Hawks")
+```
+
+****
+# Ejercicio 1
+****
+
+En este ejercicio se nos pide un estudio del conjunto de datos *Hawks* aplicando el método *K-means*. Para ello, deberemos fijarnos en que el conjunto de datos hace referencia a una serie de muestras recogidas durante el estudio de halcones. Podemos ver que el mayor interés de este cojunto de datos es clasificar los diferentes halcones en básicamente tres especies como viene indicado en la variable *Species*: *CH* (Halcón de Cooper o *Cooper's*), *RT* (Colirrojo) y *SS* (Gavilán americano).
+
+Para realizar nuestro análisis, guardaremos la variable Species para comprobar los resultados obtenidos. El análisis *K-means* lo realizaremos con las siguientes variables numéricas: *Wing*, *Weight*, *Culmen* y *Hallux*.
+
+De estas variables, podemos dar una breve descripción para entender mejor el contexto de los datos:
+
+* *Wing* hace referencia a la longitud (en mm) de la pluma primaria del ala desde la punta hasta la muñeca a la que se une.
+
+* *Weight* hace referencia al peso corporal (en g).
+
+* *Culmen* hace referencia a la longitud (en mm) de la parte superior del pico desde la punta hasta el punto que choca con la parte carnosa del ave.
+
+* *Hallux* hace referencia a la longitud (en mm) de la garra asesina del ave.
+
+Usaremos estas cuatro variables numéricas para hacer el análisis. Son métricas de longitudes corporales y pesos caracterizan a los halcones y veremos si nos son de ayuda para poder agrupar a los halcones según su especie. Habría que mencionar que podemos intuir que el número óptimo de grupos debería ser de tres al contar con tres especies, pero deberemos analizarloy ser honestos con los resultados del análisis. 
+
+Por esto mismo, lo primero que haremos será definir nuestras variables de interés para nuestro análisis.
+
+```{r}
+# variable con la columna de las especies
+x <- Hawks[, c(7, 10, 11, 12, 13)]
+```
+
+Veamos si nuestros datos contienen valores nulos.
+
+```{r}
+summary(x)
+```
+
+Podemos observar que todas las variables contienen valores nulos. Procedemos a eleminar estos valores.
+
+```{r}
+x_clean <- na.omit(x)
+
+
+# creamos una variable con solo las etiquetas para las validaciones finales
+x_species <- x_clean[, 1]
+# creamos una variable sin las etiquetas
+x <- x_clean[, -c(1)]
+summary(x)
+```
+
+Además, podemos ver que, al ser medidas distintas como el peso y la longitud, variables como *Weight* tienen una escala muy grande en comparación con las otras variables. Por este motivo, deberíamos normalizar nuestro conjunto de datos. Normalizaremos los datos por la diferencia y obtendremos rangos de valores entre 0 y 1.
+
+```{r}
+normalizeMinData <- function(x){(x - min(x)) / (max(x) - min(x))}
+x_scaled <- normalizeMinData(x)
+summary(x_scaled)
+```
+
+
+Por lo tanto, como no conocemos el número de clústeres, deberemos probar para varios para luego analizar cual es el que ofrece mejores resultados.
+
+
+```{r}
+# probamos unos cuentos clusteres
+for (i in c(2, 5, 8)) {
+  fit <- kmeans(x_scaled, i) # kmean del conjunto de datos seleccionado para cada numero de clusteres
+  y_cluster <- fit$cluster # # identificador de cluster para cada muestra
+  clusplot(x_scaled, y_cluster, color = TRUE, shade = TRUE, labels = 2, lines = 0) # hacemos plot para cada numero de clusters
+}
+```
+
+
+Ahora, procederemos a evaluar la calidad de los *kmeans*. Para ello, haremos uso de la función silhouette y obtendremos el vaor medio del valor de la silueta para obtener una estimación de la calidad del agrupamiento.
+
+```{r}
+d <- daisy(x_scaled) # distancia entre puntos
+resultados <- rep(0, 10)
+for (i in c(2, 3, 4, 5, 6, 7, 8, 9, 10)) {
+  fit <- kmeans(x_scaled, i)
+  y_cluster <- fit$cluster
+  sk <- silhouette(y_cluster, d)
+  resultados[i] <- mean(sk[, 3])
+  print(resultados[i]) # los valores se corresponden con el orden ascenddente de los clusteres
+}
+
+plot(2:10, resultados[2:10], type = 'o', col = "blue")
+```
+
+Parece ser que el número de clústeres que otorgan una mayor calidad es de dos ya que tiene el valor más próximo a uno (0.81). Sin embargo, haremos otra comprobación para la elección del número de clústeres.
+
+Podemos usar el método del codo donde buscamos obtener la suma de WCSS (*Within Clusters Summed Squares*, es decir, la suma de los cuadrados dentro de cada grupo) en función de la cantidad de clústeres y seleccionar aquel número de clústeres a partir del cual se dejan de producir variaciones en el valor de WCSS.
+
+```{r}
+set.seed(456)
+wcss <- vector()
+for(i in 1:10){
+  wcss[i] <- sum(kmeans(x_scaled, i)$withinss)
+}
+
+ggplot() + geom_point(aes(x = 1:10, y = wcss), color = 'blue') + 
+  geom_line(aes(x = 1:10, y = wcss), color = 'blue') + 
+  ggtitle("Método del Codo") + 
+  xlab('Cantidad de clústeres k') + 
+  ylab('WCSS')
+```
+
+Vemos como, a partir de 3 clústeres, la mejora que se produce en la distancia interna de los grupos ya es insignificante. Por lo tanto, podemos decir que parece que un valor de tres grupos para k es adecueado.
+
+Podemos mencionar que estos métodos anteriores son considerados técnicas de validación interna, que en el caso de los modelos no supervisados de clustering sirven tanto para medir la calidad del agrupamiento obtenido como para obtener el número óptimo de grupos.
+
+A continuación, podemos prodceder a usar técnicas de validación externa para dar una valoración final sobre la calidad del agrupamiento obtenido. Debemos tener en cuenta que podemos hacer uso de esta técnica ya que disponemos de los datos etqieutados, es decir, cada observación ya tiene definida a la especie a la que pertenece.
+
+Por lo tanto, aplicaremos de nuevo el *kmeans* para tres clústeres. Compararemos las variables usadas dos a dos con el valor real de la variable donde estan las etiqeutas *species*.
+
+```{r}
+# debemos establaecer una semilla para mantener la misma solución
+set.seed(123)
+
+hawks3Clusters <- kmeans(x_scaled, 3)
+# renombraremos nuestro conjunto de datos para poder añadirle una columna nueva
+xWithCluster <- x_scaled
+# creamos una columna nueva con los clusters asigandos a cada observación para poder verlos en el plot
+xWithCluster$Cluster3 <- as.factor(hawks3Clusters$cluster)
+```
+
+Representamos el tamaño del ala y el peso.
+
+```{r}
+ggplot(xWithCluster, aes(x = Wing, y = Weight, color = Cluster3)) +
+  geom_point() +
+  labs(title = "Clustering k-means - 3 segmentos", x = "Tamaño del ala (mm)", y = "Peso (g)") +
+  theme_minimal()
+
+ggplot(x_scaled, aes(x = Wing, y = Weight, color = x_species)) +
+  geom_point() +
+  labs(title = "Datos reales", x = "Tamaño del ala (mm)", y = "Peso (g)") +
+  theme_minimal()
+```
+
+Representamos el tamaño del pico y el peso.
+
+```{r}
+ggplot(xWithCluster, aes(x = Wing, y = Culmen, color = Cluster3)) +
+  geom_point() +
+  labs(title = "Clustering k-means - 3 segmentos", x = "Tamaño del ala (mm)", y = "Tamaño del pico (mm)") +
+  theme_minimal()
+
+ggplot(x_scaled, aes(x = Wing, y = Culmen, color = x_species)) +
+  geom_point() +
+  labs(title = "Datos reales", x = "Tamaño del ala (mm)", y = "Tamaño del pico (mm)") +
+  theme_minimal()
+```
+
+
+```{r}
+ggplot(xWithCluster, aes(x = Culmen, y = Weight, color = Cluster3)) +
+  geom_point() +
+  labs(title = "Clustering k-means - 3 segmentos", x = "Tamaño del pico (mm)", y = "Peso (g)") +
+  theme_minimal()
+
+ggplot(x_scaled, aes(x = Culmen, y = Weight, color = x_species)) +
+  geom_point() +
+  labs(title = "Datos reales", x = "Tamaño del pico (mm)", y = "Peso (g)") +
+  theme_minimal()
+```
+
+Podemos intentar dar un nombre a los grupos que ha formado el algortimo:
+
+* Grupo 1: Mecla que coincide con el halcón de copper (azul) y el gavilán americano (verde)
+
+* Grupo 2: Principalmente colirrojo (rojo)
+
+* Grupo 3: Mezcla de halcón de Cooper (azul) y colirrojo (rojo)
+
+Podemos comprobar que a pesar de conocer de antemano el número de clústeres ideal para el conjunto de datos, el algortimo no es capaz de hacer una segmentación apropiada para las especies.
+
+****
+# Ejercicio 2
+****
+
+En el apartado anterior hemos utilizado *k-means*, un algoritmo de *clustering* particional, que basa la agrupación de diferentes puntos en la distancia que hay entre ellos. Por otro lado, en este apartado, haremos uso de modelos de *clustering* basados en la densidad, es decir, algoritmos que discriminan los grupos a través de zonas de alta concentración de observaciones separadas entre sí por zonas con menor densidad de observaciones. Podemos destacar dos algoritmos de este tipo de *clustering*: DBSCAN y OPTICS.
+
+
+Usaremos el mismo conjunto de datos usado anteriormente con nuestra selección de variables ya preprocesadas.
+
+### OPTICS
+
+Primero usaremos el método OPTICS dejando su parámetro *eps* por defecto. Más adelante, intentaremos obtener el valor más óptimo. Para la elección de *minPts* deberíamos escoger un número bastante más grande que el número de variables utilizadas.
+
+```{r}
+# pondremos minPts a 10 para reducir bastante el ruido
+opticsData <- optics(x_scaled, minPts = 10)
+opticsData
+```
+
+Representamos el *reachability diagram* o diagram de alcanzabilidad, que nos es más que un gráfico que muestra la distancia de alcanzabiliadad. Su interpretación se basa en los valles y picos del diagrama. Los valles representan los clústeres, separados por los picos que hacen referencia a los valores más alejados de estos grupos. Además, cuanto más profundo es un valle, más cantidad de puntos tiene ese clúster.
+
+En este diagrama, podemos observar un primer clúster muy grande, seguido de dos clústeres más pequeños y otros dos medianos. Por lo tanto, detectamos hasta cinco segmentos.
+
+```{r}
+plot(opticsData)
+```
+
+En el siguiente gráfico, vemos una representación de las distancias entre los puntos vecinos de un mismo clúster y del resto. Ademñas, podemos observar los cinco grupos identificados anteriormente. y vemos como los picos pueden identificarse por los valores de los valores atípicos del gráfico.
+
+```{r}
+wing<- x_scaled$Wing
+weight <- x_scaled$Weight
+plot(wing, weight, col ="green")
+
+polygon(wing[opticsData$order], weight[opticsData$order])
+```
+
+A continuación, podemos utilizar la información obtenida por optics para extraer una agrupación de la ordenación realizada. El resultado que obtendremos saerá similar al que obtendríamos si utilizaramos DBSCAN estableciendo el parámetro *eps* con el valor que estableceremos en *eps_cl*. La única diferencia con un clustering DBSCAN es que OPTICS no es capaz de asignar algunos puntos de frontera y los reporta en su lugar como ruido.
+
+
+```{r}
+dbscanExp <- extractDBSCAN(opticsData, eps_cl = 0.03)
+dbscanExp
+```
+
+
+
+```{r}
+plot(dbscanExp)
+```
+
+Representamos los segmentos obtenidos al igual que hicimos en la validación del punto anterior.
+
+
+```{r}
+# creamos un set nuevo
+xWithDbscan <- x_scaled
+# añadimos los resultados del extractDBSCAN
+xWithDbscan$DbscanCluster <- as.factor(dbscanExp$cluster)
+# añadimos el resultado de OPTICS
+xWithDbscan$OpticsOrder <- as.factor(opticsData$order)
+
+ggplot(xWithDbscan, aes(x = Wing, y= Weight, color = DbscanCluster)) +
+  theme_minimal() +
+  geom_point(alpha = 0.6, size = 2) +
+  labs(title = "Clusteres aplicando extractDBSCAN", x= "Tamaño del ala (mm)", y = "Peso (g)", color= "Cluster")
+
+ggplot(x_scaled, aes(x = Wing, y = Weight, color = x_species)) +
+  geom_point() +
+  labs(title = "Datos reales", x = "Tamaño del ala (mm)", y = "Peso (g)") +
+  theme_minimal()
+```
+
+
+
+```{r}
+ggplot(xWithDbscan, aes(x = Culmen, y= Weight, color = DbscanCluster)) +
+  theme_minimal() +
+  geom_point(alpha = 0.6, size = 2) +
+  labs(title = "Clusteres aplicando extractDBSCAN", x= "Tamaño del pico (mm)", y = "Peso (g)", color= "Cluster")
+
+ggplot(x_scaled, aes(x = Culmen, y = Weight, color = x_species)) +
+  geom_point() +
+  labs(title = "Datos reales", x = "Tamaño del pico (mm)", y = "Peso (g)") +
+  theme_minimal()
+```
+
+Con este algoritmo vemos que la identificaciñon de grupos es más sencilla y más precisa. Podemos encontrar:
+
+* Grupo 1: Principalmente gavilán americano (morado)
+
+* Grupo 2: Principalmente colirrojo (azul)
+
+* Grupo 3: Principalmente halcón de Cooper (verde)
+
+
+
+Por otro lado, mediante el cálculo de la media de la silhouette podemos ver la calidad del agrupamiento para tres segmentos.
+
+```{r}
+d <- daisy(x_scaled) # distancia entre puntos
+
+sk <- silhouette(dbscanExp$cluster, d)
+mean(sk[, 3])
+```
+
+
+Comparandolo con los datos originales parece que nuestra solución es bastante consistente con este algoritmo. Sin embargo, debemos tener en cuenta que el método interpreta algunos valores como atípicos (grupo 0) cuando podrían estan lo suficientemente cerca del clúster como para no ser considerados como tal. A pesar de ello, se obtiene un agrupamiento de una calidad considerable (cerca de 0.7) y que identifica los grupos de forma similar a como lo hacen los datos originales.
+
+
+****
+# Ejercicio 3
+****
+
+Hemos podido comprobar como con *kmeans*, aunque en este caso práctico en particular conociamos las etiquetas de forma previa, hemos tenido que comprobar cual podría ser el número adecuado de segmentos para el conjunto de datos. Mientras que para OPTICS no ha sido necesario. Solo hemos tenido que definir la mínima densidad aceptada alrededor de un centroide (minPts) y analizar los resultados que ofrecía. Además, hemos podido observar que la calidad del agrupamiento para tres grupos con *kmeans* ha sido de 0.64, mientras que para los métodos basados en densidad es de 0.69. Sin embargo, la clasificación de los grupos es muy superior en el caso de los métodos por densidades que por *kmeans*.
+
+Podemos mencionar una serie de ventajas y desventajas de ambos algortimos (algoritmos de densidad AD):
+
+**Ventajas**
+
+* *kmeans* es más rápido y simple
+
+* AD permite agrupar datos de diferentes geometrías (formas no lineales)
+
+* AD no necesita especificar el número de clusteres
+
+
+**Desventajas**
+
+* *kmeans* necesita definir el número de clústeres previo
+
+* *kmeans* tiende a generar clusteres circulares y no se le da bien tratar con datos que contienen valores atípicos
+
+* AD requiere de un mayor coste computacional
+
+* AD es sensible a la elección previa de parámetros como *eps* (DBSCAN) y *minPts*.
+
+Finalmente, en este caso práctico se ha podido comprobar que los métodos por densidades han proporcionado unos resultados mejores respecto a los particionales como *kmeans* tanto por facilidad de aplicación (no hay necesidad de buscar número óptimo de clústeres), tratamiento de valores atípicos en los datos y resultados de agrupameinto tanto a nivel númerico (la calidad de agrupamiento ha sido superior en los métodos por densidad) como al analizarlo visualmente.
+
