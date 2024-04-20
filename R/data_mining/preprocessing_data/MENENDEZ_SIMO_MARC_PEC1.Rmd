@@ -1,0 +1,560 @@
+---
+title: "Minería de Datos: PEC1"
+author: "Marc Menéndez Simó"
+date: "27-03-2024"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+****
+# Ejercicio 1
+****
+
+El cliente nos ha explicado que últimamente tiene muchos problemas derivados del fraude con tarjetas de crédito. Estos problemas suelen ser largas revisiones manuales de cada caso, costosas devoluciones de los cargos, denegaciones de transacciones legítimas, etc. Nos han dicho que su mayor preocuapción ahora mismo es mejorar su capacidad de versi una nueva transacción es fraudulenta o no. Para ello, nos hemos propuesto seguir una metodología CRISP-DM para llevar acabo el proyecto.
+
+Primero de todo, deberemos trasladar el problema del cliente (fraude con tarjetas de crédito) y su objetivo (saber si una transacción es lícita o fraudulenta) a un entorno de desarrollo de un proyecto de minería de datos. Entonces, vemos que en este proyecto nos encontraremos con la tarea de predecir si una transacción hecha con una tarjeta de crédito es positiva (lícita) o negativa (fraudulenta). Nuestro objetivo será obtener un modelo que, entrenado con datos de otras transacciones, otorgue una predicción sobre otras transacciones.
+
+A continuación, deberemos inspeccionar los datos recolectados del cliente con el objetivo de entender mejor con qué datos trabajaremos y así crear una ruta óptima de preparación y creación del modelo. Tenemos acceso a un conjunto de datos con miles de transacciones donde econtramos una variable tiempo en segundos entre las transacciones, una variable cantidad numérica sobre cuanto dinero ha supuesto esa transacción, una variable clase binaria donde se indica si una transacción es fraudulenta (1) o no fraudulenta (0). Podemos hacer una primera aproximación a los datos realizando una visualización en el tiempo del número de transacciones para ver en qué horarios se realizan más transacciones y cuando menos. Además, deberemos documentar cualquier indicio de valores erroneos o variables que no aporten información relevante.
+
+Uno de los pasos más impportantes es la preparación de los datos, ya que determinará la calidad del modelo. Para ello, seleccionaremos solo las variables que son relevantes para nuestro análisis y buscaremos y corregiremos valores nulos o erróneos. Además, deberemos tener en cuenta la normalización de los datos, es decir, podríamos tener que la variable cantidad contiene números muy diferentes con transacciones de poco dinero a otras muy caras. También, deberemos prestar atención al balanceo de los datos, es decir, cómo estan distribuidos. Por ejemplo, podríamos tener que existan 500 transacciones fraudulentas y que el resto, 5000, sean no fraudulentas. También es interesante comprobar si existe correlación entre alguna de las variables.
+
+Una vez, hemos explorado y preparado los datos, podemos proceder a seleccionar y crear las técnicas que usaremos para nuestro modelo. Teniendo en cuenta, que nos encontramos ante un caso datos estructurados y que queremos predecir una variable categórica (clase) y binaria, la técnica adecuada debería ser una regresión logística. Podremos separar los datos en datos de entrenamiento y de prueba. Probaremos diferentes versiones del modelo ajustando los parámetros hasta obtener un nivel de rendimiento deseado.
+
+A continuación, evaluaremos los diferentes modelos para ver qué modelo se ajusta mejor al requerimiento del cliente. Para ello, nos apoyaremos en el conjunto de datos de prueba creado en el anterior paso y lo compararemos con el conjunto de datos de entrenamiento para ver el nivel de precision, exactitud, F1, recall gracias a una matriz de confusión. A partir de estos resultados, deberemos decidir qué modelo cumple mejor con las necesidades del cliente y si podemos pasar a la siguiente fase.
+
+Por último, la fase de implementación consiste en presentarle los resultados al cliente de forma que sea útil para su objetivo y se entienda lo mejor posible, es decir, traducimos el modelo a la estartegia empresarial. Podríamos generear un informe con los resultados obtenidos o, lo que en este caso sería más útil y lo que seguramente prefiera el cliente, implantar el modelo a la arquitectura de la empresa para poder predecir los casos fraudulentos de forma eficaz.
+
+
+****
+# Ejercicio 2
+****
+
+```{r message=FALSE, warning=FALSE}
+
+if (!require('ggplot2')) install.packages('ggplot2'); library('ggplot2')
+# libreria que nos permite hacer multiplot
+if(!require('Rmisc')) install.packages('Rmisc'); library('Rmisc')
+# libreria para representar matriz de correlaciones
+if(!require("corrplot")) install.packages("corrplot"); library("corrplot")
+# libreria para poder utilizar la tecnica FAMD
+if(!require("FactoMineR")) install.packages("FactoMineR"); library("FactoMineR")
+
+if(!require("factoextra")) install.packages("factoextra"); library("factoextra")
+# valores nulos
+if(!require("naniar")) install.packages("naniar");library("naniar")
+# representamos más de un gráfico en una misma figura
+if(!require("gridExtra")) install.packages("gridExtra");library("gridExtra")
+
+if(!require("dplyr")) install.packages("dplyr");library("dplyr")
+
+if(!require("tidyr")) install.packages("tidyr");library("tidyr")
+
+# get all factors
+if(!require("hardhat")) install.packages("hardhat");library("hardhat")
+
+# cobinacion de niveles
+if(!require("forcats")) install.packages("forcats");library("forcats")
+
+# tabalas mejoradas
+if(!require("janitor")) install.packages("janitor");library("janitor")
+```
+
+
+
+# Exploración previa de los datos
+
+Realizamos una carga de los datos 
+
+```{r}
+data <- read.csv(file = 'accident.CSV')
+head(data, 2)
+```
+
+
+Veamos las diferentes variables que contiene el conjunto de datos:
+
+```{r}
+names(data)
+```
+
+Vemos que la gran mayoría de variables son categóricas ya que estan emparejadas con una variable con el código y otra con el significado de ese código.
+
+Mostramos los valores de algunas variables que puedan ser interesantes
+
+```{r}
+unique(data$MAN_COLLNAME)
+unique(data$RELJCT2NAME)
+```
+
+Veamos la frecuencia de accidentes dependiendo del tiempo atmosférico. 
+
+```{r}
+weatherAccidents <- table(data$WEATHERNAME)
+# ordenamos en orden descendente para que la visualización sea más clara
+sortedWeatherAccidents <- weatherAccidents[order(weatherAccidents, decreasing = TRUE)]
+```
+
+Es muy interesante que se hayan registrado más accidentes en los días claros que en días con peores condiciones.
+
+```{r}
+par(mar=c(10,3,1,1))
+barplot(prop.table(sortedWeatherAccidents), 
+      ylab="Frequency", col="skyblue", las=2, main = "Frecuencia accidentes por tiempo atm")
+```
+
+
+Sigamos explorando otros datos. Por ejemplo, veamos los cinco tipos de accidentes más comunes:
+
+```{r}
+accidentsType <- table(data$FATALS)
+topaccidentsType <- head(accidentsType[order(accidentsType, decreasing = TRUE)])
+barAccidents <- barplot(prop.table(topaccidentsType), las=2, main = "Número muertes")
+```
+
+Vemos que mínimo se produce una muerte por accidente y que es lo más frecuente del conjunto de datos.
+
+
+Además, tenemos variables temporales como la hora de llegada al hospital.
+
+```{r}
+hospitalHour <- table(data$HOSP_HR)
+hospitalHour
+barplot(prop.table(hospitalHour), main = "Frecuencia horaria llegadas hospital")
+```
+
+Nos encontramos ante un caso de que existen más valores que no nos aportan información relevante ya que hay más casos de horas no registradas que de registradas. En posteriores secciones, limpiaremos este tipo de variables para que nos sean de mayor utilidad. Si quitamos los casos con valor 88 y 99 que solo nos dicen que no se ha registrado porque no se ha podido o porque no lo han llevado al hospital tendremos:
+
+
+```{r}
+filteredHospHour <- subset(data$HOSP_HR, data$HOSP_HR < 24)
+filteredHospHourTable <- table(filteredHospHour)
+barplot(prop.table(filteredHospHourTable), main = "Frecuencia horaria llegadas hospital")
+```
+Vemos que los ingresos al hospital son más comunes por la tarde que por la mañana.
+
+También podríamos ver el número de accidentes del año entero:
+
+```{r}
+monthTable <- table(data$MONTH)
+barplot(prop.table(monthTable), main = "Frecuencia accidentes por mes")
+```
+
+Parece que en invierno el número de accidentes es ligeramente menor que en el resto del año.
+
+Hasta aquí, hemos explorado datos categóricos. Sería interesante ahora añadir alguna variable numérica a nuestra exploración. Por ejemplo, el número de conductores ebrios por accidente.
+
+```{r}
+summary(data$DRUNK_DR)
+unique(data$DRUNK_DR)
+```
+
+
+```{r}
+histPercent <- function(x, ...) {
+   H <- hist(x, plot = FALSE)
+   H$density <- with(H, 100 * density* diff(breaks)[1])
+   labs <- paste(round(H$density), "%", sep="")
+   plot(H, freq = FALSE, labels = labs, ylim=c(0, 1.08*max(H$density)))
+}
+
+histPercent(data$DRUNK_DR, col="gray", main = "numero conductores ebrios por accidente")
+```
+
+Vemos que en la mayoría de accidentes no hay conductores ebrios y solo 1% de los casos sehan registrado accidentes con 2 conductores bebidos.
+
+
+
+# Objetivo del análisis
+
+Determinar qué factores (condiciones del accidentes) son más frecuentes y ver si existe alguna asociación entre ellas.
+
+
+
+# Preparación del dato
+
+Una vez hemos explorado ciertas variables y nos hemos familiarizado con ellas, es el momento de prepararlas para su posterior uso y que el modelo resultante de estas variables no se vea afectado por una mala calidad de los datos.
+
+En este apartado empezaremos a preparar los datos con los que realizariamos el modelo. Este apartado consiste en seleccionar los datos con los que queremos trabajar y transformarlos en unos datos óptimos para nuestro modelo. Nos referimos a tareas de preprocesamiento como normalizar o discretizar, limpiar de valores nulos o erroneos o reducir el número de variables para un mejor manejo. Además, una vez preprocesados podremos hacer un trabajo de gestión de características.
+
+
+Primero seleccionamos los datos que más interés tienen con nuestro objetivo.
+
+```{r}
+target <- subset(data, select = c(LGT_COND, LGT_CONDNAME, HARM_EV, HARM_EVNAME, MAN_COLL, MAN_COLLNAME, RELJCT1, RELJCT1NAME, RELJCT2, RELJCT2NAME, TYP_INT, TYP_INTNAME, WRK_ZONE, WRK_ZONENAME))
+
+head(target)
+```
+
+Hemos seleccionado las variables que hacen referencia a las condiciones del accidente
+
+
+## Preprocesamiento
+
+
+### Transformación de datos
+
+
+Primero de todo analizamos los datos seleccionados.
+
+```{r}
+summary(target)
+dim(target)
+```
+
+Podemos factorizar las variables categóricas y definir los niveles.
+
+```{r}
+target$MAN_COLLNAME <- as.factor(target$MAN_COLLNAME)
+levels(target$MAN_COLLNAME) <- c(unique(target$MAN_COLLNAME))
+
+target$LGT_CONDNAME <- as.factor(target$LGT_CONDNAME)
+levels(target$LGT_CONDNAME) <- c(unique(target$LGT_CONDNAME))
+
+target$HARM_EVNAME <- as.factor(target$HARM_EVNAME)
+levels(target$HARM_EVNAME) <- c(unique(target$HARM_EVNAME))
+
+target$RELJCT1NAME <- as.factor(target$RELJCT1NAME)
+levels(target$RELJCT1NAME) <- c(unique(target$RELJCT1NAME))
+
+target$RELJCT2NAME <- as.factor(target$RELJCT2NAME)
+levels(target$RELJCT2NAME) <- c(unique(target$RELJCT2NAME))
+
+target$TYP_INTNAME <- as.factor(target$TYP_INTNAME)
+levels(target$TYP_INTNAME) <- c(unique(target$TYP_INTNAME))
+
+head(target, 3)
+``` 
+
+
+### Discretización
+
+Primero miremos todos los niveles de cada variable.
+
+```{r}
+get_levels(target)
+```
+
+Vemos que hay niveles que podríamos combinar a fin de reducir la cantidad de categorías y facilitar su manejo.
+
+```{r}
+# combinamos los niveles Dark
+target <- target %>% 
+  mutate(LGT_CONDNAME = fct_recode(
+    LGT_CONDNAME,
+    "Dark" = "Dark - Not Lighted",
+    "Dark" = "Dark - Lighted",
+    "Dark" = "Dark - Unknown Lighting"))
+
+# combinamos los niveles Related
+
+target <- target %>% 
+  mutate(RELJCT2NAME = fct_recode(
+    RELJCT2NAME,
+    "Entrance/Exit RampREL" = "Entrance/Exit Ramp",
+    "Entrance/Exit RampREL" = "Entrance/Exit Ramp Related",
+    "IntersectionREL" = "Intersection", 
+    "IntersectionREL" = "Intersection-Related",
+    "Driveway AccessREL" = "Driveway Access",
+    "Driveway AccessREL" = "Driveway Access Related"))
+```
+
+```{r}
+levels(target$RELJCT2NAME)
+```
+
+### Tratamiento de valores nulos
+
+Examinaremos que clase de valores nulos puede tener el conjunto de datos.
+
+```{r}
+colSums(is.na(target))
+```
+
+```{r}
+colSums(target == "")
+```
+Hasta aquí parece que no tiene los valores nulos más comunes. Sin embargo, por lo que hemos podido comprobar existen casos en los que no se han registrado las diferentes circunstancias de algunos accidentes.
+
+Eliminaremos valores categóricos del tipo "Not Reported", "Reported as Unknown" o "None".
+
+```{r}
+colSums(target == "Not Reported")
+```
+
+```{r}
+colSums(target == "Reported as Unknown")
+```
+
+```{r}
+colSums(target == "None")
+```
+
+```{r}
+sum(target$WRK_ZONENAME == "None") / dim(target)[1] * 100
+```
+
+Vemos que la categoría None representa más de un 97% de la totalidad de la variable *WRK_ZONENAME*, por lo tanto, decidimos eliminar esta variable ya que no contiene información relevante
+
+
+```{r}
+dim(target)
+```
+Ahora eliminaremos los registros que contienen Reported as Unknown y Not Reported.
+
+```{r}
+
+# eliminamos los Reported as Unkown
+targetClean <- filter_all(target, all_vars(. != "Reported as Unknown"))
+targetClean <- filter_all(targetClean, all_vars(. != "Not Reported"))
+
+```
+
+```{r}
+dim(targetClean)
+```
+
+Creamos el conjunto de datos limpio sin las variables de código, ya que no las usaremos.
+
+```{r}
+targetFinal <- subset(targetClean, select = c(LGT_CONDNAME, HARM_EVNAME, MAN_COLLNAME, RELJCT1NAME, RELJCT2NAME, TYP_INTNAME))
+dim(targetFinal)
+```
+Eliminamos los niveles que hemos borrado para que no aparezcan.
+
+```{r}
+targetFinal <- droplevels(targetFinal)
+```
+
+
+Vemos que hemos eliminado más de un 8% los registros.
+
+```{r}
+(1 - dim(targetFinal)[1] / dim(target)[1]) * 100
+```
+
+
+### Reducción de dimensionalidad de variables
+
+En este apartado usaremos todas las variabless categóricas del conjunto de datos que nos interesan para conseguir nuestro objetivo de intentar encontrar alguna asociación entre los accidentes más frecuentes. Para ello, al tener un gran número de variables y con muchos niveles factoriales, aplicaremos una técnica de reducción  de dimensionalidad para simplificar el análisis y reducir redundancia de los datos. Es muy interesante intentar apalicar esta técnica ya que tenemos un gran númeo de variables (6) y sería de gran utilidad poder reducir el número. La tarea más comlpicada de este apartado será la interpretabilidad de los resultados.
+
+
+
+# Gestión de características
+
+
+Modificamos el nombre de un nivel de la categoría *MAN_COLLNAME* para que sea más legible a la hora de representar los análisis. 
+
+```{r}
+targetFinal$MAN_COLLNAME <- revalue(targetFinal$MAN_COLLNAME, c("The First Harmful Event was Not a Collision with a Motor Vehicle in Transport" = "FirstNotCollisionMotor"))
+levels(targetFinal$MAN_COLLNAME)
+```
+
+
+Reduciremos el número de niveles a los más frecuentes para que el análisis sea viable, ya que existen variables con más de 50 categorías como:
+
+```{r}
+length(levels(targetFinal$HARM_EVNAME))
+```
+Por lo tanto, veamos las categorías más frecuentes de cada variable:
+
+```{r}
+
+for (i in names(targetFinal)) {
+  p <- paste("targetFinal$", i, sep = "")
+  df <- eval(parse(text = p))
+  t <- table(df)
+  sortedt <- head(t[order(t, decreasing = TRUE)])
+  par(mar=c(10,3,1,1))
+  barplot(prop.table(sortedt), 
+      ylab="Frequency", col="skyblue", las=2, main = i)
+}
+
+```
+
+
+Debido a que en la mayoría de los casos las tres categorías más frecuentes representan más del 90% de la totalidad de datos de la varibale, nos quedaremos con tres categorías por variable. Debemos hacer una excepcion con la variable *HARM_EVNAME* ya que deberemos incluir más categorías para que esto se cumpla.
+
+
+Por lo tanto nuestro conjunto final de datos será df1:
+
+```{r}
+
+df1 <- targetFinal %>% filter(LGT_CONDNAME %in% c("Dawn", "Dark", "Dusk"))
+
+df1 <- df1 %>% filter(HARM_EVNAME %in% c("Other Fixed Object", "Traffic Signal Support", "Post, Pole or Other Supports", "Bridge Overhead Structure", "Parked Motor Vehicle", "Embankment"))
+
+df1 <- df1 %>% filter(MAN_COLLNAME %in% c("Rear-to-Rear", "FirstNotCollisionMotor", "Angle")) 
+
+df1 <- df1 %>% filter(RELJCT1NAME %in% c("No", "Yes")) 
+
+df1 <- df1 %>% filter(RELJCT2NAME %in% c("Entrance/Exit RampREL", "Driveway AccessREL", "Railway Grade Crossing"))
+
+df1 <- df1 %>% filter(TYP_INTNAME %in% c("Y-Intersection", "T-Intersection", "Roundabout"))
+
+```
+
+Hemos reducido los datos un 32% más.
+
+```{r}
+nrow(df1) / nrow(targetFinal) * 100
+```
+
+
+A continuación, podemos reducir la dimensionalidad de las variables que nos interesan para un mejor manejo. Para ello, haremos un análisis de correspondencias múltiple (AMC o MCA en inglés), ya que nos proponemos analizar las posibles asociaciones de más de dos variables categóricas.
+
+```{r}
+accidentMca <- MCA(df1, graph = FALSE)
+head(get_eigenvalue(accidentMca))
+```
+
+Podemos hacer gráfico del porcentaje de la varianza explicada para averiguar el número de dimensiones que deberíamos seleccionar.
+
+```{r}
+fviz_screeplot(accidentMca, addlabels = TRUE)
+```
+
+
+Vemos que el análisis podría sugerir escoger dos factores ya que a partir de la segunda componente la pendiente no cambia demasiado.
+
+
+### Analisis de correlaciones
+
+Vemos que las variables más correlacionadas con la primera dimensión son *TYP_INTNAME* y *RELJCT2NAME*, mientras que *LGT_CONDNAME* y *HARM_ENVNAME* por la segunda.
+
+```{r}
+fviz_mca_var(accidentMca, choice = "mca.cor",
+             repel = TRUE,
+             ggtheme = theme_grey())
+```
+
+
+Podemos representar la relación y asociación entre las categorías de las variables. Veremos que las categorías con un perfil similar estan agrupadas juntas.
+
+```{r}
+fviz_mca_var(accidentMca, shape.var = 15, repel = TRUE,
+             ggtheme = theme_grey())+labs(title = " Nube de puntos de las Modalidades/Categorías")
+```
+
+Podemos ver esto mismo, pero con las variables a las que pertenece cada categoría.
+
+```{r}
+# numero de categorias por variable
+cats = apply(df1, 2, function(x) nlevels(as.factor(x)))
+```
+
+```{r}
+mca1_vars_df = data.frame(accidentMca$var$coord, Variable = rep(names(cats), 
+    cats))
+
+
+ggplot(data = mca1_vars_df, aes(x = Dim.1, y = Dim.2, label = rownames(mca1_vars_df))) +
+    geom_hline(yintercept = 0, colour = "gray70") + geom_vline(xintercept = 0, 
+    colour = "gray70") + geom_text(aes(colour = Variable)) + ggtitle("                    Grafica de las categorias por variable")
+```
+
+Vemos cómo los tipos de intersección y la proximidad a un cruce se agrupan, así como también lo hacen los primeros acontecimientos que producen daños y las condiciones lumínicas. 
+
+### Calidad de representación
+
+La calidad de representación de las variables viene dada por el coseno cuadrado (cos2). Si la coategoría de una variable está bien representada por dos dimensiones, la suma del cos2 es cercana a uno. Si cos2 de una variable es elevado, indica una buena representación de la variable en la dimensión. Sin embargo, un cos2 bajo nos indica que la variable no está bien representada por las dimensiones.
+
+```{r}
+head(accidentMca$var$cos2)
+```
+Podemos ver que las variables con una peor represerntación tienden a un color más blanquecino, las medio representadas son más azuladas y las mejor representadas más rojizas.
+
+```{r}
+fviz_mca_var(accidentMca, col.var = "cos2", 
+             repel = TRUE,
+             gradient.cols = c("#00AFBB", "#E7B800","#FC4E07"),
+                ggtheme = theme_grey())+labs(title = "                  Nube de puntos de las Modalidades/Categorías")
+```
+
+Las categoría con un color más calido son las mejor represenentadas en las dos primeras dimensiones. Y a continuación, con mayor exactitud:
+
+```{r}
+fviz_cos2(accidentMca, choice = "var", axes = 1:2)+labs(title = "                        Cos2 de Categorías para las Dimensiones 1-2")
+```
+
+
+Nos encontramos con bastantes variables con una mala representación. Sabiendo esto, deberíamos tomar la interpretación de sus correspondientes puntos en el diagrama anterior con precaución. Además, podría ser necesaria una solución que tenga en cuenta un mayor número de dimensiones.
+
+
+### Contribución
+
+Las variables que tengan un porcentaje de contribución más elevado, serán aquellas que definan mejor la dimensión. Además, aquellas variables que contribuyan más a las dimensiones serán las que más expliquen la variabilidad del conjunto de datos.
+
+```{r}
+fviz_contrib(accidentMca, "var", axes = 1, top = 15)+labs(title = " Contribución de las Categorías para las Dimensión 1")
+```
+
+En la primera dimensión encontramos las cetegorías Railway Grade Crossing, T-Intersection, Roundabout, Entrance/Exit RampREL y Y-Intersection.
+
+```{r}
+fviz_contrib(accidentMca, "var", axes = 2, top = 15)+labs(title = " Contribución de las Categorías para las Dimensión 2")
+```
+
+Mientras que para la segunda dimensión encontramos Dawn, Dark, Post, Pole Or Other Supports, Traffic Signal Support, Roundabout.
+
+Podríamos coger estos dos grupos de variables y sustituir a las variables del conjunto de datos. Se les podría dar un significado para indicar condiciones que podrían afectar al hecho de tener un accidente.
+
+Para ver las categorías que más contribuyen en total podemos usar un gráfico de dispersión
+
+```{r}
+fviz_mca_var(accidentMca, col.var = "contrib", 
+             gradient.cols = c("#00AFBB", "#E7B800","#FC4E07"),
+                ggtheme = theme_grey()
+             , repel = TRUE)
+```
+
+Podríamos repetir el análisis MCA descartando las variables que menos contribuyen para mejorar nuestros resultados.
+
+A continuación, podemos intentar agrupar los individuos utilizando los niveles de una variable escogida
+
+```{r}
+fviz_mca_ind(accidentMca,
+            label = "none",
+            habillage = df1$RELJCT2NAME,
+            pallette = c("#CCCCFF", "#F08080"),
+            addEllipses = TRUE,
+            ggtheme = theme_grey())
+```
+
+
+```{r}
+fviz_ellipses(accidentMca, c("RELJCT2NAME", "TYP_INTNAME", "HARM_EVNAME", "LGT_CONDNAME"), 
+              geom = "point")
+```
+
+
+## Interpretación de los resultados
+
+
+En este conjunto de datos hemos analizado diferentes variables relacionadas con accidentes registrados en EEUU en 2020.
+
+Se ha hecho una exploración inicial donde se han podido comprobar una serie de puntos:
+
+* En todos los registros se tiene mínimo un accidente fatal, siendo una muerte el registro más común.
+
+* Al contrario de lo que podríamos pensar, se registran muchos más casos de accidentes en días claros que con mal tiempo.
+
+* Podemos observar que se producen más accidentes durante la segunda mitad del año que durante la primera.
+
+* En otra ocasión, al contrario de lo que podríamos pensar, solo en un cuarto de los casos se registran accidentes con al menos un conductor ebrío. Es decir, en la mayoría de casos, no hay conductores bebidos.
+
+Debemos destacar que estas observaciones son superficiales y merecerían un análisi en mayor profundidad para poder hablar de hechos en lugar de observaciones.
+
+Por último, se ha hecho uso de una técnica de reducción de dimensionalidad de las variables relacionadas con las condiciones de los accidentes para intentar descubrir si existe una asociación entre ellas. Se ha hecho uso de la técnica de análisis de correspondencias múltiple ya que tratamos con más de dos variables categóricas.
+
+De este análisis se han podido extraer nuevas variables que sustituirian a nuestras variables objetivo (condiciones de accidente) que podrían ser un indicador de mayor riesgo de accidente dependidendo de una serie de condiciones de la carretera.
+
+
+## Referencias
+
+MCA - Multiple Correspondence Analysis in R: Essentials - Articles - STHDA. (s. f.). http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/114-mca-multiple-correspondence-analysis-in-r-essentials/
